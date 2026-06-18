@@ -29,15 +29,33 @@
   .fade{animation:fadeUp .25s ease both}.pop{animation:pop .25s ease both}
   .disp{font-family:'Space Grotesk',sans-serif}.mono{font-family:'JetBrains Mono',monospace}
   .opt:active{transform:scale(.99)}
-  /* — анимации переходов между этапами и золотые пасхалки — */
-  @keyframes goldSweepAnim{0%{transform:translateX(-130%) skewX(-18deg);opacity:0}25%{opacity:.95}100%{transform:translateX(130%) skewX(-18deg);opacity:0}}
+  /* — плавные и разные анимации переходов между этапами — */
+  @keyframes slideFwd{from{opacity:0;transform:translateX(38px)}to{opacity:1;transform:none}}
+  @keyframes slideBack{from{opacity:0;transform:translateX(-38px)}to{opacity:1;transform:none}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+  @keyframes popIn{0%{opacity:0;transform:scale(.9)}60%{opacity:1;transform:scale(1.025)}100%{transform:scale(1)}}
+  @keyframes zoomIn{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:none}}
+  @keyframes qSlideR{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+  @keyframes qSlideL{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
+  .t-fwd{animation:slideFwd .44s cubic-bezier(.22,.61,.36,1) both}
+  .t-back{animation:slideBack .44s cubic-bezier(.22,.61,.36,1) both}
+  .t-up{animation:riseIn .46s cubic-bezier(.22,.61,.36,1) both}
+  .t-pop{animation:popIn .52s cubic-bezier(.34,1.4,.64,1) both}
+  .t-zoom{animation:zoomIn .46s cubic-bezier(.22,.61,.36,1) both}
+  .q-r{animation:qSlideR .34s cubic-bezier(.22,.61,.36,1) both}
+  .q-l{animation:qSlideL .34s cubic-bezier(.22,.61,.36,1) both}
+  @media (prefers-reduced-motion: reduce){
+    .t-fwd,.t-back,.t-up,.t-pop,.t-zoom,.q-r,.q-l,.fade,.pop{animation-duration:.01ms}
+  }
+  /* — золотые пасхалки — */
+  @keyframes goldSweepAnim{0%{transform:translateX(-130%) skewX(-16deg);opacity:0}30%{opacity:.7}100%{transform:translateX(130%) skewX(-16deg);opacity:0}}
   @keyframes coinFall{0%{transform:translateY(-12vh) rotate(0);opacity:0}12%{opacity:1}100%{transform:translateY(112vh) rotate(720deg);opacity:.12}}
   @keyframes tipIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
   @keyframes goldPop{0%{transform:scale(.4);opacity:0}55%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
   .gold-sweep{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden}
-  .gold-sweep::after{content:"";position:absolute;top:0;bottom:0;left:0;width:55%;
-    background:linear-gradient(100deg,transparent,rgba(230,193,90,.16),rgba(230,193,90,.42),rgba(230,193,90,.16),transparent);
-    animation:goldSweepAnim .6s ease both}
+  .gold-sweep::after{content:"";position:absolute;top:0;bottom:0;left:0;width:60%;
+    background:linear-gradient(100deg,transparent,rgba(230,193,90,.10),rgba(230,193,90,.28),rgba(230,193,90,.10),transparent);
+    animation:goldSweepAnim .8s cubic-bezier(.4,0,.2,1) both}
   .coin{position:fixed;top:0;z-index:65;pointer-events:none;animation:coinFall linear forwards;will-change:transform}
   .gold-tip{position:fixed;left:0;right:0;bottom:18px;z-index:61;display:flex;justify-content:center;pointer-events:none}
   .gold-tip>span{max-width:24rem;margin:0 16px;background:rgba(33,28,18,.96);border:1px solid #E6C15A;color:#E6C15A;
@@ -133,6 +151,7 @@ var App = {
   badges: [],        // id полученных бейджей
   toast: null,       // текст всплывашки
   quiz: [],          // текущий набор вопросов модуля
+  fx: null,          // класс анимации перехода для текущего рендера
 };
 
 var toastTimer = null;
@@ -320,10 +339,19 @@ function Chart(spec) {
     var color = Gt >= j ? "#34D399" : "#F87171";
     var sn = Math.min(p(j), p(Gt));
     var bh = Math.max(1.4, Math.abs(p(Gt) - p(j)));
-    kids.push(h("g", null,
-      h("line", { x1: r, x2: r, y1: p(ul), y2: p(mt), stroke: color, strokeWidth: "0.8" }),
-      h("rect", { x: r - Y / 2, y: sn, width: Y, height: bh, fill: color })
-    ));
+    var wick = h("line", { x1: r, x2: r, y1: p(ul), y2: p(mt), stroke: color, strokeWidth: "0.8" });
+    var body = h("rect", { x: r - Y / 2, y: sn, width: Y, height: bh, fill: color });
+    // последняя свеча — «живая»: её тикает тикер (см. startCandleTickers)
+    if (V === a.length - 1) {
+      wick.setAttribute("data-live-wick", "1");
+      body.setAttribute("data-live-body", "1");
+      body.setAttribute("data-open", p(j));     // координата открытия
+      body.setAttribute("data-close", p(Gt));   // координата текущей цены
+      body.setAttribute("data-hi", p(ul));      // координата хая
+      body.setAttribute("data-lo", p(mt));      // координата лоя
+      body.setAttribute("data-up", color === "#34D399" ? "1" : "0");
+    }
+    kids.push(h("g", null, wick, body));
   });
   // ступенчатый стоп (трейлинг)
   if (e) {
@@ -508,7 +536,7 @@ function ScreenQuiz() {
       h("span", { className: "mono", style: { color: d.muted, fontSize: 12 } }, l.icon, " ", l.title, " · ", t + 1, "/", a)),
     h("div", { style: { height: 4, background: d.panel, borderRadius: 4, marginTop: 10, overflow: "hidden" } },
       h("div", { style: { height: "100%", width: ((t + (c ? 1 : 0)) / a) * 100 + "%", background: d.gold, transition: "width .3s" } })),
-    h("h3", { className: "disp fade", style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3, marginTop: 20 } }, u.q),
+    h("h3", { className: "disp " + (App.qIdx % 2 ? "q-r" : "q-l"), style: { fontSize: 20, fontWeight: 600, lineHeight: 1.3, marginTop: 20 } }, u.q),
     u.chart && h("div", { style: { marginTop: 14 } }, Chart(u.chart)),
     h("div", { className: "flex flex-col", style: { marginTop: 18, gap: 10 },
       children: i.map(function (opt, g) {
@@ -682,12 +710,81 @@ function goldBurst(text) {
   setTimeout(close, 3200);
 }
 
-// Переход между этапами: золотой свип + лёгкий шанс «золотого факта»
+// Выбор анимации перехода по направлению навигации
+var SCREEN_RANK = { start: 0, intro: 1, map: 2, lesson: 3, quiz: 4, moduleResult: 5, final: 6 };
+function pickFx(from, to) {
+  if (to === "moduleResult" || to === "final") return "t-pop";      // итог/финал — «выскакивает»
+  if (to === "map" && (from === "lesson" || from === "quiz")) return "t-back"; // назад к модулям
+  if (to === "lesson") return "t-zoom";                            // вход в модуль — наезд
+  var a = SCREEN_RANK[from], b = SCREEN_RANK[to];
+  if (b > a) return "t-fwd";                                       // вперёд
+  if (b < a) return "t-back";                                      // назад
+  return "t-up";                                                   // нейтрально
+}
+
+// Переход между этапами: своя анимация + золотой свип + лёгкий шанс «золотого факта»
 function go(name) {
+  App.fx = pickFx(App.screen, name);
   App.screen = name;
   goldSweep();
   render();
   if (Math.random() < 0.32) setTimeout(function () { showGoldTip(randomEgg()); }, 380);
+}
+
+/* ── «Живая» свеча: тик текущей цены строго в контексте графика ─────── */
+// Двигается только последняя (формирующаяся) свеча — в пределах своего хая/лоя
+// и не меняя направление (бычья остаётся бычьей). Прошлые свечи закрыты и неподвижны.
+var tickerRAF = null;
+function stopCandleTickers() {
+  if (tickerRAF) { cancelAnimationFrame(tickerRAF); tickerRAF = null; }
+}
+function startCandleTickers() {
+  stopCandleTickers();
+  var bodies = [].slice.call(document.querySelectorAll("[data-live-body]"));
+  if (!bodies.length) return;
+  var nodes = bodies.map(function (b) {
+    return {
+      b: b,
+      wick: b.parentNode ? b.parentNode.querySelector("[data-live-wick]") : null,
+      open: +b.getAttribute("data-open"),
+      close: +b.getAttribute("data-close"),
+      hi: +b.getAttribute("data-hi"),   // координата хая (меньший y — выше цена)
+      lo: +b.getAttribute("data-lo"),   // координата лоя (больший y — ниже цена)
+      up: b.getAttribute("data-up") === "1",
+      cur: +b.getAttribute("data-close"),
+      vel: 0,
+    };
+  });
+  function frame() {
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      // мини случайное блуждание с возвратом к истинному close (mean-reverting тик)
+      n.vel += (Math.random() - 0.5) * 0.5;     // случайный импульс рынка
+      n.vel += (n.close - n.cur) * 0.045;       // тяга обратно к реальной цене
+      n.vel *= 0.86;                            // затухание (вязкость)
+      n.cur += n.vel;
+      // в контексте: цена не выходит за хай/лой свечи
+      if (n.cur < n.hi) { n.cur = n.hi; n.vel *= -0.4; }
+      if (n.cur > n.lo) { n.cur = n.lo; n.vel *= -0.4; }
+      // и не пересекает открытие — иначе сменилось бы направление свечи
+      if (n.up && n.cur > n.open) n.cur = n.open;
+      if (!n.up && n.cur < n.open) n.cur = n.open;
+      // тело: между открытием и текущей ценой
+      var by = Math.min(n.open, n.cur);
+      var bh = Math.max(1.2, Math.abs(n.cur - n.open));
+      n.b.setAttribute("y", by.toFixed(2));
+      n.b.setAttribute("height", bh.toFixed(2));
+      // фитиль слегка «дышит» к хаю/лою, всегда охватывая текущую цену
+      if (n.wick) {
+        var hiTick = n.hi - Math.random() * 1.1;
+        var loTick = n.lo + Math.random() * 1.1;
+        n.wick.setAttribute("y1", Math.min(hiTick, n.cur).toFixed(2));
+        n.wick.setAttribute("y2", Math.max(loTick, n.cur).toFixed(2));
+      }
+    }
+    tickerRAF = requestAnimationFrame(frame);
+  }
+  tickerRAF = requestAnimationFrame(frame);
 }
 
 // Пасхалка: 5 тапов по слову «Бахи» на старте
@@ -719,6 +816,7 @@ function bahaTap() {
 })();
 
 function render() {
+  stopCandleTickers();
   var root = document.getElementById("root");
   root.innerHTML = "";
 
@@ -738,10 +836,15 @@ function render() {
   else if (App.screen === "quiz") screen = ScreenQuiz();
   else if (App.screen === "moduleResult") screen = ScreenModuleResult();
   else if (App.screen === "final") screen = ScreenFinal();
-  if (screen) inner.appendChild(screen);
+  if (screen) {
+    if (App.fx) screen.className += " " + App.fx; // анимация перехода для этого этапа
+    inner.appendChild(screen);
+  }
+  App.fx = null; // анимация одноразовая — не повторять на внутренних перерисовках
 
   var outer = h("div", { className: "w-full flex justify-center", style: { background: d.bg, color: d.text, minHeight: "100vh", fontFamily: "Inter, system-ui, sans-serif" } }, inner);
   root.appendChild(outer);
+  startCandleTickers(); // оживляем последнюю свечу на всех видимых графиках
 }
 
 render();
