@@ -29,6 +29,22 @@
   .fade{animation:fadeUp .25s ease both}.pop{animation:pop .25s ease both}
   .disp{font-family:'Space Grotesk',sans-serif}.mono{font-family:'JetBrains Mono',monospace}
   .opt:active{transform:scale(.99)}
+  /* — анимации переходов между этапами и золотые пасхалки — */
+  @keyframes goldSweepAnim{0%{transform:translateX(-130%) skewX(-18deg);opacity:0}25%{opacity:.95}100%{transform:translateX(130%) skewX(-18deg);opacity:0}}
+  @keyframes coinFall{0%{transform:translateY(-12vh) rotate(0);opacity:0}12%{opacity:1}100%{transform:translateY(112vh) rotate(720deg);opacity:.12}}
+  @keyframes tipIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  @keyframes goldPop{0%{transform:scale(.4);opacity:0}55%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+  .gold-sweep{position:fixed;inset:0;z-index:60;pointer-events:none;overflow:hidden}
+  .gold-sweep::after{content:"";position:absolute;top:0;bottom:0;left:0;width:55%;
+    background:linear-gradient(100deg,transparent,rgba(230,193,90,.16),rgba(230,193,90,.42),rgba(230,193,90,.16),transparent);
+    animation:goldSweepAnim .6s ease both}
+  .coin{position:fixed;top:0;z-index:65;pointer-events:none;animation:coinFall linear forwards;will-change:transform}
+  .gold-tip{position:fixed;left:0;right:0;bottom:18px;z-index:61;display:flex;justify-content:center;pointer-events:none}
+  .gold-tip>span{max-width:24rem;margin:0 16px;background:rgba(33,28,18,.96);border:1px solid #E6C15A;color:#E6C15A;
+    font-size:12.5px;line-height:1.4;padding:9px 14px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.55);animation:tipIn .3s ease both}
+  .egg-burst{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;pointer-events:auto;background:rgba(11,10,7,.35)}
+  .egg-burst>div{background:rgba(20,17,9,.94);border:1px solid #E6C15A;border-radius:16px;padding:22px 26px;text-align:center;
+    box-shadow:0 0 44px rgba(230,193,90,.4);animation:goldPop .5s ease both}
 </style>
 </head>
 <body>
@@ -152,8 +168,7 @@ function openModule(idx) {
   App.sel = null;
   App.answered = false;
   App.moduleCorrect = 0;
-  App.screen = "lesson";
-  render();
+  go("lesson");
 }
 
 function choose(idx) {
@@ -186,6 +201,7 @@ function nextQuestion() {
     App.qIdx += 1;
     App.sel = null;
     App.answered = false;
+    goldSweep();
     render();
     return;
   }
@@ -204,18 +220,16 @@ function nextQuestion() {
   if (perfect && mod.id === "entry") addBadge("entry");
   if (perfect && mod.id === "manage") addBadge("manage");
   if (perfect && mod.id === "safe") addBadge("detective");
-  App.screen = "moduleResult";
-  render();
+  go("moduleResult");
 }
 
 function afterResult() {
   if (App.modIdx < fa.length - 1) {
-    App.screen = "map";
+    go("map");
   } else {
     addBadge("grad");
-    App.screen = "final";
+    go("final");
   }
-  render();
 }
 
 function restart() {
@@ -231,6 +245,7 @@ function restart() {
   App.done = [];
   App.badges = [];
   App.quiz = [];
+  goldSweep();
   render();
 }
 
@@ -250,7 +265,7 @@ function StatBar(lvl, xp, streak) {
   },
     h("span", { style: { color: d.gold } }, lvl.icon, " ", lvl.name),
     h("span", { style: { color: d.muted } }, "XP ", h("span", { style: { color: d.text } }, xp)),
-    h("span", { style: { color: streak >= 3 ? d.gold : d.muted } }, "🔥 ", streak)
+    h("span", { onClick: function () { showGoldTip(randomEgg()); }, style: { color: streak >= 3 ? d.gold : d.muted, cursor: "pointer" } }, "🔥 ", streak)
   );
 }
 
@@ -397,14 +412,14 @@ function ScreenStart() {
       h("img", { src: Na.hero, alt: "Баха", style: { display: "block", width: "100%", height: 230, objectFit: "cover", objectPosition: "center 30%" } }),
       h("div", { className: "mono", style: { position: "absolute", left: 12, bottom: 12, background: "rgba(11,10,7,.74)", borderRadius: 10, padding: "5px 10px", color: d.gold, fontSize: 12 } }, xi.clubHandle)
     ),
-    h("h1", { className: "disp", style: { fontSize: 32, lineHeight: 1.1, fontWeight: 700, marginTop: 18 } }, "Школа трейдинга ", h("span", { style: { color: d.gold } }, "Бахи")),
+    h("h1", { className: "disp", style: { fontSize: 32, lineHeight: 1.1, fontWeight: 700, marginTop: 18 } }, "Школа трейдинга ", h("span", { onClick: bahaTap, style: { color: d.gold, cursor: "pointer" } }, "Бахи")),
     h("p", { style: { color: d.muted, marginTop: 14, fontSize: 15, lineHeight: 1.5 } }, "Не «копируй вслепую», а учись торговать. Основы, чтение сигналов, лоты, риск и сопровождение — чтобы со временем торговать самому."),
     h("div", { className: "flex gap-2 mt-6" },
       ["XAU/USD", "BTC/USD", "EUR/USD"].map(function (t) {
         return h("div", { className: "mono", style: { background: d.panel, border: "1px solid " + d.border, color: d.text, fontSize: 11, padding: "6px 10px", borderRadius: 8 } }, t);
       })),
     h("div", { className: "mono", style: { color: d.muted, fontSize: 11, marginTop: 8 } }, "будни · золото & форекс    выходные · крипта"),
-    h("button", { onClick: function () { App.screen = "intro"; render(); }, className: "opt", style: { width: "100%", marginTop: 26, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, border: "none" } }, "Начать обучение"),
+    h("button", { onClick: function () { go("intro"); }, className: "opt", style: { width: "100%", marginTop: 26, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, border: "none" } }, "Начать обучение"),
     Footer()
   );
 }
@@ -416,7 +431,7 @@ function ScreenIntro() {
     h("h2", { className: "disp", style: { fontSize: 26, fontWeight: 700, marginTop: 8 } }, uo.title),
     h("p", { style: { color: d.muted, marginTop: 4, fontSize: 13 } }, uo.sub),
     ContentBlocks(uo.blocks),
-    h("button", { onClick: function () { App.screen = "map"; render(); }, className: "opt", style: { width: "100%", marginTop: 24, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, border: "none" } }, "К модулям →"),
+    h("button", { onClick: function () { go("map"); }, className: "opt", style: { width: "100%", marginTop: 24, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, border: "none" } }, "К модулям →"),
     Footer()
   );
 }
@@ -456,7 +471,7 @@ function ScreenMap() {
               ? h("span", { style: { color: d.gold, fontSize: 18 } }, "→")
               : null);
       }) }),
-    allDone && h("button", { onClick: function () { addBadge("grad"); App.screen = "final"; render(); }, className: "opt", style: { width: "100%", marginTop: 18, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, border: "none" } }, "Смотреть результат 🏁"),
+    allDone && h("button", { onClick: function () { addBadge("grad"); go("final"); }, className: "opt", style: { width: "100%", marginTop: 18, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, border: "none" } }, "Смотреть результат 🏁"),
     Footer()
   );
 }
@@ -466,12 +481,12 @@ function ScreenLesson() {
   var l = fa[App.modIdx];
   var total = App.quiz.length;
   return h("div", { className: "fade pt-6" },
-    h("button", { onClick: function () { App.screen = "map"; render(); }, style: { color: d.muted, fontSize: 13, background: "none", border: "none" } }, "‹ модули"),
+    h("button", { onClick: function () { go("map"); }, style: { color: d.muted, fontSize: 13, background: "none", border: "none" } }, "‹ модули"),
     h("div", { style: { fontSize: 40, marginTop: 14 } }, l.icon),
     h("div", { className: "mono", style: { color: d.gold, fontSize: 11, letterSpacing: 1.5, marginTop: 8 } }, "УРОК · ", total, " вопросов"),
     h("h2", { className: "disp", style: { fontSize: 24, fontWeight: 700, marginTop: 6 } }, l.title),
     ContentBlocks(l.lesson),
-    h("button", { onClick: function () { App.screen = "quiz"; render(); }, className: "opt", style: { width: "100%", marginTop: 24, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, border: "none" } }, "Начать вопросы →")
+    h("button", { onClick: function () { go("quiz"); }, className: "opt", style: { width: "100%", marginTop: 24, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, border: "none" } }, "Начать вопросы →")
   );
 }
 
@@ -489,7 +504,7 @@ function ScreenQuiz() {
   return h("div", { className: "pt-6" },
     StatBar(lvl, App.xp, App.streak),
     h("div", { className: "flex items-center justify-between", style: { marginTop: 16 } },
-      h("button", { onClick: function () { App.screen = "map"; render(); }, style: { color: d.muted, fontSize: 13, background: "none", border: "none" } }, "‹ модули"),
+      h("button", { onClick: function () { go("map"); }, style: { color: d.muted, fontSize: 13, background: "none", border: "none" } }, "‹ модули"),
       h("span", { className: "mono", style: { color: d.muted, fontSize: 12 } }, l.icon, " ", l.title, " · ", t + 1, "/", a)),
     h("div", { style: { height: 4, background: d.panel, borderRadius: 4, marginTop: 10, overflow: "hidden" } },
       h("div", { style: { height: "100%", width: ((t + (c ? 1 : 0)) / a) * 100 + "%", background: d.gold, transition: "width .3s" } })),
@@ -589,6 +604,120 @@ function ScreenFinal() {
 }
 
 /* ── Корневой рендер (заменяет компонент no + ReactDOM.render) ──────── */
+/* ── Анимации переходов между этапами и пасхалки по золоту ──────────── */
+// Факты и присказки про торговлю золотом (XAUUSD)
+var goldEggs = [
+  "🪙 XAUUSD — это золото к доллару. Торгуется почти 24/5.",
+  "🥇 Золото веками было активом-убежищем во времена кризисов.",
+  "📈 1 лот золота = 100 унций — каждый шаг цены ощутимо двигает P&L.",
+  "🏦 Центробанки — крупнейшие держатели золота в мире.",
+  "🌙 Лондонский фиксинг задаёт ориентир цены золота дважды в день.",
+  "⚖️ Тройская унция золота ≈ 31.1 грамма.",
+  "💧 Золото не ржавеет и не тускнеет — потому и ценится тысячи лет.",
+  "🕯️ На M15 одна свеча золота — это 15 минут борьбы быков и медведей.",
+  "🛡️ Когда рынки падают, золото часто растёт — отсюда «тихая гавань».",
+  "🔔 Золото любит решения ФРС по ставке — жди волатильности.",
+  "💛 Лучшая сделка — та, где риск посчитан заранее. Золото не прощает жадности.",
+  "🧭 Тренд — друг трейдера. По золоту тоже.",
+];
+function randomEgg() { return goldEggs[Math.floor(Math.random() * goldEggs.length)]; }
+
+// Золотой «свип» поверх экрана при смене этапа
+function goldSweep() {
+  var s = document.createElement("div");
+  s.className = "gold-sweep";
+  document.body.appendChild(s);
+  setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 650);
+}
+
+// Дождь из золотых монет
+function coinRain(n) {
+  var icons = ["🪙", "🥇", "💰", "✨"];
+  for (var i = 0; i < n; i++) {
+    (function () {
+      var c = document.createElement("div");
+      c.className = "coin";
+      c.textContent = icons[Math.floor(Math.random() * icons.length)];
+      c.style.left = Math.random() * 96 + "vw";
+      var dur = 2.2 + Math.random() * 1.8;
+      c.style.animationDuration = dur + "s";
+      c.style.animationDelay = Math.random() * 0.5 + "s";
+      c.style.fontSize = 16 + Math.random() * 16 + "px";
+      document.body.appendChild(c);
+      setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, (dur + 0.7) * 1000);
+    })();
+  }
+}
+
+// Маленькая золотая подсказка-факт снизу
+var tipTimer = null;
+function showGoldTip(msg) {
+  var old = document.getElementById("gold-tip");
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+  var wrap = document.createElement("div");
+  wrap.id = "gold-tip";
+  wrap.className = "gold-tip";
+  var span = document.createElement("span");
+  span.textContent = msg;
+  wrap.appendChild(span);
+  document.body.appendChild(wrap);
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 3600);
+}
+
+// Большая пасхалка по центру
+function goldBurst(text) {
+  coinRain(30);
+  var b = document.createElement("div");
+  b.className = "egg-burst";
+  var box = document.createElement("div");
+  box.innerHTML =
+    '<div style="font-size:46px">🏆</div>' +
+    '<div class="disp" style="color:#E6C15A;font-weight:700;font-size:18px;margin-top:8px">' + text + "</div>" +
+    '<div style="color:#D6D2C8;font-size:12px;margin-top:6px">' + randomEgg() + "</div>";
+  b.appendChild(box);
+  document.body.appendChild(b);
+  var close = function () { if (b.parentNode) b.parentNode.removeChild(b); };
+  b.addEventListener("click", close);
+  setTimeout(close, 3200);
+}
+
+// Переход между этапами: золотой свип + лёгкий шанс «золотого факта»
+function go(name) {
+  App.screen = name;
+  goldSweep();
+  render();
+  if (Math.random() < 0.32) setTimeout(function () { showGoldTip(randomEgg()); }, 380);
+}
+
+// Пасхалка: 5 тапов по слову «Бахи» на старте
+var bahaTaps = 0, bahaTimer = null;
+function bahaTap() {
+  bahaTaps++;
+  clearTimeout(bahaTimer);
+  bahaTimer = setTimeout(function () { bahaTaps = 0; }, 1200);
+  if (bahaTaps >= 5) {
+    bahaTaps = 0;
+    coinRain(20);
+    showGoldTip(randomEgg());
+  }
+}
+
+// Пасхалка: Konami-код → «золотое прикосновение»
+(function () {
+  var seq = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
+  var pos = 0;
+  window.addEventListener("keydown", function (e) {
+    var k = e.key.toLowerCase();
+    if (k === seq[pos]) {
+      pos++;
+      if (pos === seq.length) { pos = 0; goldBurst("GOLDEN TOUCH разблокирован"); }
+    } else {
+      pos = k === seq[0] ? 1 : 0;
+    }
+  });
+})();
+
 function render() {
   var root = document.getElementById("root");
   root.innerHTML = "";
