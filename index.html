@@ -1295,8 +1295,7 @@ function render() {
   }
 
   var screen = null;
-  if (!isLoggedIn()) screen = ScreenAuth();   // обязательный вход через Telegram
-  else if (App.screen === "start") screen = ScreenStart();
+  if (App.screen === "start") screen = ScreenStart();
   else if (App.screen === "intro") screen = ScreenIntro();
   else if (App.screen === "map") screen = ScreenMap();
   else if (App.screen === "lesson") screen = ScreenLesson();
