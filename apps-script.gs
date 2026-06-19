@@ -96,15 +96,12 @@ function handleTelegramUpdate_(update, e) {
       var payload = {
         chat_id: from.id,
         text: 'Привет, ' + (from.first_name || 'трейдер') + '! 👋\n\n' +
-              'Ты в Школе трейдинга Бахи. Доступ открыт — жми кнопку ' +
-              '«🎓 Пройти обучение» внизу, чтобы начать.'
+              'Ты в Школе трейдинга Бахи. Доступ открыт — нажми кнопку ' +
+              '«🎓 Пройти обучение» под этим сообщением, чтобы начать.'
       };
       if (webapp) {
-        // reply-кнопка «выскакивает» снизу и открывает квиз внутри Telegram
-        payload.reply_markup = {
-          keyboard: [[{ text: '🎓 Пройти обучение', web_app: { url: webapp } }]],
-          resize_keyboard: true
-        };
+        // inline-кнопка прикреплена к сообщению и открывает квиз внутри Telegram
+        payload.reply_markup = { inline_keyboard: [[{ text: '🎓 Пройти обучение', web_app: { url: webapp } }]] };
       }
       UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
         method: 'post',
