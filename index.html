@@ -165,6 +165,8 @@ var CONFIG = {
   statsEndpoint: "",
   // Telegram ID, которым доступна панель разработчика. Напр.: [123456789].
   adminIds: [],
+  // Telegram-юзернеймы (без @, регистр не важен), которым доступна панель.
+  adminUsernames: ["Desanji"],
   // Запасной секрет для входа в панель через #dev=СЕКРЕТ (бутстрап до настройки adminIds).
   devSecret: "baha-dev",
 };
@@ -222,6 +224,12 @@ function isAdmin() {
   var u = Identity.user;
   if (u && CONFIG.adminIds.indexOf(Number(u.id)) !== -1) return true;
   if (u && CONFIG.adminIds.indexOf(String(u.id)) !== -1) return true;
+  if (u && u.username) {
+    var un = String(u.username).toLowerCase();
+    for (var i = 0; i < CONFIG.adminUsernames.length; i++) {
+      if (String(CONFIG.adminUsernames[i]).toLowerCase() === un) return true;
+    }
+  }
   // бутстрап-доступ по секрету в URL: ...#dev=СЕКРЕТ
   try {
     var m = (location.hash || "").match(/dev=([^&]+)/);
