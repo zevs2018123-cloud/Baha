@@ -159,8 +159,11 @@ var App = {
    КОНФИГУРАЦИЯ (заполните после деплоя Apps Script и создания бота)
    ════════════════════════════════════════════════════════════════════ */
 var CONFIG = {
-  // Username бота без @ — для ссылки «Открыть бота» на экране входа (t.me/<bot>).
+  // Username бота без @ — для ссылок на бота/мини-приложение на экране входа.
   botUsername: "BahaXAUBTCbot",
+  // Short name именованного Mini App (BotFather /newapp). Прямая ссылка открытия
+  // квиза: t.me/<botUsername>/<appShortName>. Пусто — ссылка ведёт на чат бота.
+  appShortName: "quiz",
   // URL веб-приложения Google Apps Script (см. apps-script.gs и инструкцию).
   statsEndpoint: "https://script.google.com/macros/s/AKfycbxB8Pq0zala3GwnD6o8fRE13PZC_rMYNl5R5fwFNSwC0F7_y83RQEl8yOWIQ-jlgsLS/exec",
   // Telegram ID, которым доступна панель разработчика. Напр.: [123456789].
@@ -697,15 +700,11 @@ function ScreenAuth() {
       h("div", { className: "mono", style: { position: "absolute", left: 12, bottom: 12, background: "rgba(11,10,7,.74)", borderRadius: 10, padding: "5px 10px", color: d.gold, fontSize: 12 } }, xi.clubHandle)
     ),
     h("h1", { className: "disp", style: { fontSize: 28, lineHeight: 1.12, fontWeight: 700 } }, "Школа трейдинга ", h("span", { style: { color: d.gold } }, "Бахи")),
-    h("p", { style: { color: d.muted, marginTop: 12, fontSize: 14, lineHeight: 1.5 } }, "Доступ к квизу — через Telegram-бота. Откройте бота, нажмите «Start» — и он пришлёт кнопку «Открыть квиз»."),
-    // Единственный путь верификации: старт бота → квиз внутри Telegram
+    h("p", { style: { color: d.muted, marginTop: 12, fontSize: 14, lineHeight: 1.5 } }, "Квиз открывается в Telegram. Нажми кнопку — мини-приложение запустится сразу, вход подтвердится автоматически."),
+    // Прямая ссылка на Mini App (t.me/<bot>/<appShortName>) — открывается сразу
     CONFIG.botUsername
-      ? h("a", { href: "https://t.me/" + CONFIG.botUsername + "?start=quiz", target: "_blank", rel: "noopener", className: "opt", style: { display: "block", marginTop: 22, background: "#2aabee", color: "#fff", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, textDecoration: "none" } }, "✈ Открыть бота и нажать Start")
+      ? h("a", { href: CONFIG.appShortName ? ("https://t.me/" + CONFIG.botUsername + "/" + CONFIG.appShortName) : ("https://t.me/" + CONFIG.botUsername + "?start=quiz"), target: "_blank", rel: "noopener", className: "opt", style: { display: "block", marginTop: 22, background: "#2aabee", color: "#fff", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, textDecoration: "none" } }, "🎓 Открыть квиз в Telegram")
       : h("div", { className: "mono", style: { marginTop: 16, fontSize: 12, color: d.red } }, "Бот ещё не настроен (CONFIG.botUsername пуст)."),
-    h("ol", { className: "mono", style: { color: d.muted, fontSize: 12, lineHeight: 1.7, textAlign: "left", margin: "18px auto 0", maxWidth: 280, paddingLeft: 18 } },
-      h("li", null, "Открой бота по кнопке выше"),
-      h("li", null, "Нажми «Start» (или /start)"),
-      h("li", null, "Жми «📈 Открыть квиз» в ответе бота")),
     h("p", { style: { color: d.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5 } }, "Вход без пароля: Telegram сам подтверждает личность. Мы получаем только публичные данные (имя, аватар, username) — без доступа к переписке."),
     Footer()
   );
