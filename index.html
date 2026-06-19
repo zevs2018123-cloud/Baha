@@ -220,6 +220,10 @@ function userLabel() {
   return [u.first_name, u.last_name].filter(Boolean).join(" ") || ("id " + u.id);
 }
 
+function isLoggedIn() {
+  return Identity.source === "miniapp" || Identity.source === "widget";
+}
+
 function isAdmin() {
   var u = Identity.user;
   if (u && CONFIG.adminIds.indexOf(Number(u.id)) !== -1) return true;
@@ -611,6 +615,28 @@ function ContentBlocks(blocks) {
 
 /* ── Экраны ─────────────────────────────────────────────────────────── */
 // Стартовый экран (hT)
+// Экран обязательного входа через Telegram (показывается, пока не залогинен)
+function ScreenAuth() {
+  var box = h("div", { className: "fade pt-12", style: { textAlign: "center" } },
+    h("div", { style: { borderRadius: 16, overflow: "hidden", border: "1px solid " + d.border, position: "relative", marginBottom: 22 } },
+      h("img", { src: Na.hero, alt: "Баха", style: { display: "block", width: "100%", height: 200, objectFit: "cover", objectPosition: "center 30%" } }),
+      h("div", { className: "mono", style: { position: "absolute", left: 12, bottom: 12, background: "rgba(11,10,7,.74)", borderRadius: 10, padding: "5px 10px", color: d.gold, fontSize: 12 } }, xi.clubHandle)
+    ),
+    h("h1", { className: "disp", style: { fontSize: 28, lineHeight: 1.12, fontWeight: 700 } }, "Школа трейдинга ", h("span", { style: { color: d.gold } }, "Бахи")),
+    h("p", { style: { color: d.muted, marginTop: 12, fontSize: 14, lineHeight: 1.5 } }, "Войдите через Telegram, чтобы начать обучение и сохранять прогресс. Это занимает пару секунд и нужно только один раз."),
+    h("div", { id: "tg-login-holder", className: "flex justify-center", style: { marginTop: 22, minHeight: 46 } }),
+    CONFIG.botUsername
+      ? h("a", { href: "https://t.me/" + CONFIG.botUsername, target: "_blank", rel: "noopener", className: "mono", style: { display: "inline-block", marginTop: 16, fontSize: 12, color: d.muted, textDecoration: "underline" } }, "Не открывается кнопка? Открыть в Telegram →")
+      : h("div", { className: "mono", style: { marginTop: 16, fontSize: 12, color: d.red } }, "Бот ещё не настроен (CONFIG.botUsername пуст)."),
+    h("p", { style: { color: d.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5 } }, "Нажимая «Log in», вы подтверждаете вход через ваш Telegram-аккаунт. Мы получаем только имя и аватар — без доступа к переписке."),
+    Footer()
+  );
+  if (CONFIG.botUsername) {
+    setTimeout(function () { mountTelegramWidget(document.getElementById("tg-login-holder"), "large"); }, 0);
+  }
+  return box;
+}
+
 function ScreenStart() {
   return h("div", { className: "fade pt-10" },
     AccountChip(),
@@ -1024,13 +1050,13 @@ function AccountChip() {
   return box;
 }
 
-function mountTelegramWidget(holder) {
+function mountTelegramWidget(holder, size) {
   if (!holder || holder.querySelector("script,iframe")) return;
   var s = document.createElement("script");
   s.async = true;
   s.src = "https://telegram.org/js/telegram-widget.js?22";
   s.setAttribute("data-telegram-login", CONFIG.botUsername);
-  s.setAttribute("data-size", "medium");
+  s.setAttribute("data-size", size || "medium");
   s.setAttribute("data-radius", "10");
   s.setAttribute("data-onauth", "onTelegramAuth(user)");
   s.setAttribute("data-request-access", "write");
@@ -1172,7 +1198,8 @@ function render() {
   }
 
   var screen = null;
-  if (App.screen === "start") screen = ScreenStart();
+  if (!isLoggedIn()) screen = ScreenAuth();   // обязательный вход через Telegram
+  else if (App.screen === "start") screen = ScreenStart();
   else if (App.screen === "intro") screen = ScreenIntro();
   else if (App.screen === "map") screen = ScreenMap();
   else if (App.screen === "lesson") screen = ScreenLesson();
