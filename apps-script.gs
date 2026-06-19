@@ -28,6 +28,7 @@
 
 var SHEET_NAME = 'events';
 var HEADERS = ['ts', 'iso', 'session', 'uid', 'uname', 'src', 'event', 'props'];
+var PROP_ = PropertiesService.getScriptProperties();
 
 function getSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -148,7 +149,8 @@ function doGet(e) {
   var action = p.action || 'funnel';
   var callback = p.callback;
   var payload;
-  if (action === 'funnel') payload = buildFunnel_();
+  if (action === 'ping') payload = { ok: true, admins: getAdmins_(), hasToken: !!PROP_.getProperty('BOT_TOKEN'), webapp: PROP_.getProperty('WEBAPP_URL') || '' };
+  else if (action === 'funnel') payload = buildFunnel_();
   else if (action === 'users') payload = buildUsers_();
   else if (action === 'access') payload = { admins: getAdmins_() };
   else if (action === 'grant' || action === 'revoke') payload = mutateAccess_(action, p);
@@ -163,8 +165,6 @@ function doGet(e) {
 }
 
 /* ── Управление доступом к дашборду ──────────────────────────────────── */
-var PROP_ = PropertiesService.getScriptProperties();
-
 function norm_(x) { return String(x == null ? '' : x).trim().toLowerCase(); }
 
 function getAdmins_() {
