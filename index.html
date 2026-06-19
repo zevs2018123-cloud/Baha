@@ -159,7 +159,7 @@ var App = {
    КОНФИГУРАЦИЯ (заполните после деплоя Apps Script и создания бота)
    ════════════════════════════════════════════════════════════════════ */
 var CONFIG = {
-  // Username бота без @ — нужен для Telegram Login Widget в обычном браузере.
+  // Username бота без @ — для ссылки «Открыть бота» на экране входа (t.me/<bot>).
   botUsername: "BahaXAUBTCbot",
   // URL веб-приложения Google Apps Script (см. apps-script.gs и инструкцию).
   statsEndpoint: "",
@@ -174,7 +174,7 @@ var CONFIG = {
 /* ── Идентификация пользователя (Telegram Mini App или Login Widget) ──── */
 var Identity = {
   user: null,      // {id, username, first_name, last_name, photo_url}
-  source: "guest", // "miniapp" | "widget" | "guest"
+  source: "guest", // "miniapp" (верифицирован через Telegram) | "guest" (доступ закрыт)
 };
 
 function lsGet(k, def) { try { var v = localStorage.getItem(k); return v == null ? def : v; } catch (e) { return def; } }
@@ -192,27 +192,12 @@ function resolveIdentity() {
       return;
     }
   } catch (e) {}
-  // 2) Сохранённый ранее вход через виджет
-  var saved = lsGet("baha_user", "");
-  if (saved) {
-    try { Identity.user = JSON.parse(saved); Identity.source = "widget"; return; } catch (e) {}
-  }
-  // 3) Гость с анонимным стабильным id
+  // 2) Не в Telegram → гость с анонимным стабильным id (доступ закрыт до старта бота)
   var gid = lsGet("baha_guest", "");
   if (!gid) { gid = "g" + Math.random().toString(36).slice(2, 10); lsSet("baha_guest", gid); }
   Identity.user = { id: gid, username: null, first_name: "Гость" };
   Identity.source = "guest";
 }
-
-// Колбэк Telegram Login Widget (вызывается виджетом глобально)
-window.onTelegramAuth = function (user) {
-  Identity.user = user;
-  Identity.source = "widget";
-  lsSet("baha_user", JSON.stringify(user));
-  track("login", { method: "widget" });
-  showToast("✅ Вход выполнен: " + (user.username ? "@" + user.username : user.first_name || user.id));
-  render();
-};
 
 function userLabel() {
   var u = Identity.user || {};
@@ -221,7 +206,8 @@ function userLabel() {
 }
 
 function isLoggedIn() {
-  return Identity.source === "miniapp" || Identity.source === "widget";
+  // Верификация только через Telegram (старт бота → Mini App). Login Widget убран.
+  return Identity.source === "miniapp";
 }
 
 function isAdmin() {
@@ -711,25 +697,18 @@ function ScreenAuth() {
       h("div", { className: "mono", style: { position: "absolute", left: 12, bottom: 12, background: "rgba(11,10,7,.74)", borderRadius: 10, padding: "5px 10px", color: d.gold, fontSize: 12 } }, xi.clubHandle)
     ),
     h("h1", { className: "disp", style: { fontSize: 28, lineHeight: 1.12, fontWeight: 700 } }, "Школа трейдинга ", h("span", { style: { color: d.gold } }, "Бахи")),
-    h("p", { style: { color: d.muted, marginTop: 12, fontSize: 14, lineHeight: 1.5 } }, "Войдите через Telegram, чтобы начать обучение и сохранять прогресс. Это занимает пару секунд и нужно только один раз."),
-    // Главный путь без веб-логина: открыть как Mini App внутри Telegram
+    h("p", { style: { color: d.muted, marginTop: 12, fontSize: 14, lineHeight: 1.5 } }, "Доступ к квизу — через Telegram-бота. Откройте бота, нажмите «Start» — и он пришлёт кнопку «Открыть квиз»."),
+    // Единственный путь верификации: старт бота → квиз внутри Telegram
     CONFIG.botUsername
-      ? h("a", { href: "https://t.me/" + CONFIG.botUsername, target: "_blank", rel: "noopener", className: "opt", style: { display: "block", marginTop: 22, background: "#2aabee", color: "#fff", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, textDecoration: "none" } }, "✈ Открыть в Telegram")
+      ? h("a", { href: "https://t.me/" + CONFIG.botUsername + "?start=quiz", target: "_blank", rel: "noopener", className: "opt", style: { display: "block", marginTop: 22, background: "#2aabee", color: "#fff", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, textDecoration: "none" } }, "✈ Открыть бота и нажать Start")
       : h("div", { className: "mono", style: { marginTop: 16, fontSize: 12, color: d.red } }, "Бот ещё не настроен (CONFIG.botUsername пуст)."),
-    h("p", { className: "mono", style: { color: d.muted, fontSize: 11, marginTop: 8 } }, "Внутри Telegram вход произойдёт сам — без ввода пароля."),
-    // Запасной путь для браузера: Login Widget
-    CONFIG.botUsername ? h("div", { className: "flex items-center", style: { gap: 10, margin: "20px 0 4px" } },
-      h("div", { style: { flex: 1, height: 1, background: d.border } }),
-      h("span", { className: "mono", style: { fontSize: 11, color: d.muted } }, "или в браузере"),
-      h("div", { style: { flex: 1, height: 1, background: d.border } })
-    ) : null,
-    h("div", { id: "tg-login-holder", className: "flex justify-center", style: { marginTop: 12, minHeight: 46 } }),
-    h("p", { style: { color: d.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5 } }, "Мы получаем только публичные данные Telegram (имя, аватар, username) — без доступа к переписке."),
+    h("ol", { className: "mono", style: { color: d.muted, fontSize: 12, lineHeight: 1.7, textAlign: "left", margin: "18px auto 0", maxWidth: 280, paddingLeft: 18 } },
+      h("li", null, "Открой бота по кнопке выше"),
+      h("li", null, "Нажми «Start» (или /start)"),
+      h("li", null, "Жми «📈 Открыть квиз» в ответе бота")),
+    h("p", { style: { color: d.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5 } }, "Вход без пароля: Telegram сам подтверждает личность. Мы получаем только публичные данные (имя, аватар, username) — без доступа к переписке."),
     Footer()
   );
-  if (CONFIG.botUsername) {
-    setTimeout(function () { mountTelegramWidget(document.getElementById("tg-login-holder"), "large"); }, 0);
-  }
   return box;
 }
 
@@ -1117,46 +1096,20 @@ function bahaTap() {
   });
 })();
 
-/* ── Аккаунт-чип и кнопка входа через Telegram ──────────────────────── */
+/* ── Аккаунт-чип (виден только залогиненным через Telegram) ──────────── */
 function AccountChip() {
-  var loggedIn = Identity.source === "miniapp" || Identity.source === "widget";
-  var row = h("div", { className: "flex items-center justify-between", style: { marginTop: 14, gap: 10 } },
+  var loggedIn = isLoggedIn();
+  return h("div", { className: "flex items-center justify-between", style: { marginTop: 14, gap: 10 } },
     h("div", { className: "flex items-center", style: { gap: 8, minWidth: 0 } },
       (Identity.user && Identity.user.photo_url)
         ? h("img", { src: Identity.user.photo_url, alt: "", style: { width: 26, height: 26, borderRadius: "50%", flexShrink: 0 } })
-        : h("div", { style: { width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: d.panelHi, border: "1px solid " + d.border, textAlign: "center", lineHeight: "26px", fontSize: 13 } }, loggedIn ? "👤" : "🪪"),
-      h("span", { onClick: loggedIn && Identity.user ? function () { copyText(String(Identity.user.id)); } : null, title: loggedIn ? "Нажмите, чтобы скопировать ваш ID" : null, className: "mono", style: { fontSize: 12, color: loggedIn ? d.gold : d.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: loggedIn ? "pointer" : "default" } }, loggedIn ? userLabel() : "Гость")
+        : h("div", { style: { width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: d.panelHi, border: "1px solid " + d.border, textAlign: "center", lineHeight: "26px", fontSize: 13 } }, "👤"),
+      h("span", { onClick: Identity.user ? function () { copyText(String(Identity.user.id)); } : null, title: "Нажмите, чтобы скопировать ваш ID", className: "mono", style: { fontSize: 12, color: d.gold, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" } }, userLabel())
     ),
     isAdmin()
       ? h("button", { onClick: openDevPanel, className: "opt mono", style: { fontSize: 11, color: d.gold, background: d.panelHi, border: "1px solid " + d.gold, borderRadius: 9, padding: "5px 10px" } }, "🛠 Дашборд")
       : null
   );
-  // Кнопка входа через Telegram в браузере (если не залогинен)
-  var box = h("div", null, row);
-  if (!loggedIn) {
-    if (CONFIG.botUsername) {
-      var holder = h("div", { id: "tg-login-holder", style: { marginTop: 10 } });
-      box.appendChild(holder);
-      setTimeout(function () { mountTelegramWidget(holder); }, 0);
-    } else {
-      box.appendChild(h("div", { className: "mono", style: { marginTop: 8, fontSize: 11, color: d.muted } },
-        "Вход через Telegram подключается после настройки бота."));
-    }
-  }
-  return box;
-}
-
-function mountTelegramWidget(holder, size) {
-  if (!holder || holder.querySelector("script,iframe")) return;
-  var s = document.createElement("script");
-  s.async = true;
-  s.src = "https://telegram.org/js/telegram-widget.js?22";
-  s.setAttribute("data-telegram-login", CONFIG.botUsername);
-  s.setAttribute("data-size", size || "medium");
-  s.setAttribute("data-radius", "10");
-  s.setAttribute("data-onauth", "onTelegramAuth(user)");
-  s.setAttribute("data-request-access", "write");
-  holder.appendChild(s);
 }
 
 /* ── Панель разработчика: дашборд воронки ───────────────────────────── */

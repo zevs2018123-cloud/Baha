@@ -88,16 +88,24 @@ function handleTelegramUpdate_(update, e) {
     var name = [from.first_name, from.last_name].filter(Boolean).join(' ');
     // пишем как событие — пользователь сразу появится в списке дашборда
     logEvent_({ session: 'bot', uid: uid, uname: uname, src: 'bot', event: 'bot_start', props: { name: name } });
-    // отвечаем пользователю его же ID
+    // верификация пройдена → отвечаем кнопкой-ссылкой на квиз
     var token = PROP_.getProperty('BOT_TOKEN');
     if (token) {
-      var text = 'Ваш Telegram ID: ' + uid + (uname ? '\n@' + uname : '') +
-                 '\n\nПокажите этот ID администратору для доступа к панели, ' +
-                 'либо откройте приложение из кнопки-меню бота.';
+      var webapp = PROP_.getProperty('WEBAPP_URL');
+      var payload = {
+        chat_id: from.id,
+        text: 'Привет, ' + (from.first_name || 'трейдер') + '! 👋\n\n' +
+              'Ты в Школе трейдинга Бахи. Доступ открыт — жми кнопку ниже, ' +
+              'чтобы запустить квиз и начать обучение.'
+      };
+      if (webapp) {
+        // web_app-кнопка открывает квиз прямо внутри Telegram (без пароля)
+        payload.reply_markup = { inline_keyboard: [[{ text: '📈 Открыть квиз', web_app: { url: webapp } }]] };
+      }
       UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
         method: 'post',
         contentType: 'application/json',
-        payload: JSON.stringify({ chat_id: from.id, text: text }),
+        payload: JSON.stringify(payload),
         muteHttpExceptions: true
       });
     }
