@@ -234,6 +234,8 @@ function isAdmin() {
       if (String(CONFIG.adminUsernames[i]).toLowerCase() === un) return true;
     }
   }
+  // динамический whitelist (выдан кнопкой в дашборде): сервер + локально
+  if (u) { var dyn = dynAdmins(); for (var k = 0; k < dyn.length; k++) if (entryMatches(dyn[k], u.id, u.username)) return true; }
   // бутстрап-доступ по секрету в URL: ...#dev=СЕКРЕТ
   try {
     var m = (location.hash || "").match(/dev=([^&]+)/);
@@ -284,18 +286,104 @@ function sendEvent(ev) {
   } catch (e) {}
 }
 
-// Чтение агрегатов из Apps Script через JSONP (обходит CORS на GET)
-function fetchFunnelGlobal(cb) {
+// Универсальный JSONP-запрос к Apps Script (обходит CORS на GET)
+function jsonp(params, cb) {
   if (!CONFIG.statsEndpoint) { cb(null); return; }
-  var cbName = "__bahaFunnel" + Date.now().toString(36);
+  var cbName = "__baha" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   var done = false;
   window[cbName] = function (data) { done = true; cleanup(); cb(data); };
+  var qs = Object.keys(params).map(function (k) { return k + "=" + encodeURIComponent(params[k]); }).join("&");
   var s = document.createElement("script");
-  s.src = CONFIG.statsEndpoint + (CONFIG.statsEndpoint.indexOf("?") === -1 ? "?" : "&") + "action=funnel&callback=" + cbName;
+  s.src = CONFIG.statsEndpoint + (CONFIG.statsEndpoint.indexOf("?") === -1 ? "?" : "&") + qs + "&callback=" + cbName;
   s.onerror = function () { cleanup(); cb(null); };
   function cleanup() { try { delete window[cbName]; } catch (e) { window[cbName] = undefined; } if (s.parentNode) s.parentNode.removeChild(s); }
   document.body.appendChild(s);
   setTimeout(function () { if (!done) { cleanup(); cb(null); } }, 8000);
+}
+function fetchFunnelGlobal(cb) { jsonp({ action: "funnel" }, cb); }
+function fetchUsersGlobal(cb) { jsonp({ action: "users" }, function (d) { cb(d && d.users ? d.users : null); }); }
+
+/* ── Доступ к дашборду: серверный whitelist + локальный фоллбэк ──────── */
+var RemoteAccess = { admins: [], loaded: false };
+function localAdmins() { try { return JSON.parse(lsGet("baha_admins", "[]")) || []; } catch (e) { return []; } }
+function setLocalAdmins(a) { lsSet("baha_admins", JSON.stringify(a)); }
+function dynAdmins() { return RemoteAccess.admins.concat(localAdmins()); }
+
+function entryMatches(entry, id, uname) {
+  var t = String(entry == null ? "" : entry).trim().toLowerCase().replace(/^@/, "");
+  if (!t) return false;
+  if (id != null && t === String(id).toLowerCase()) return true;
+  if (uname && t === String(uname).toLowerCase().replace(/^@/, "")) return true;
+  return false;
+}
+// Является ли админом произвольный (uid, username) — для бейджей в списке
+function entryIsAdmin(uid, uname) {
+  if (CONFIG.adminIds.indexOf(Number(uid)) !== -1 || CONFIG.adminIds.indexOf(String(uid)) !== -1) return true;
+  var i, un = uname ? String(uname).toLowerCase().replace(/^@/, "") : "";
+  if (un) for (i = 0; i < CONFIG.adminUsernames.length; i++) if (String(CONFIG.adminUsernames[i]).toLowerCase() === un) return true;
+  var dyn = dynAdmins();
+  for (i = 0; i < dyn.length; i++) if (entryMatches(dyn[i], uid, uname)) return true;
+  return false;
+}
+
+function loadAccess(cb) {
+  jsonp({ action: "access" }, function (d) {
+    if (d && d.admins) { RemoteAccess.admins = d.admins; RemoteAccess.loaded = true; }
+    if (cb) cb(d);
+  });
+}
+function requesterParams() {
+  var u = Identity.user || {};
+  return { byId: String(u.id || ""), byName: u.username || "" };
+}
+function grantAccess(target, cb) {
+  var la = localAdmins(), tl = String(target).toLowerCase().replace(/^@/, "");
+  if (!la.some(function (x) { return String(x).toLowerCase().replace(/^@/, "") === tl; })) { la.push(target); setLocalAdmins(la); }
+  if (CONFIG.statsEndpoint) {
+    var p = requesterParams(); p.action = "grant"; p.target = target;
+    jsonp(p, function (d) {
+      if (d && d.admins) { RemoteAccess.admins = d.admins; RemoteAccess.loaded = true; }
+      if (d && d.ok === false) flash("⚠ Сервер отклонил: " + (d.error === "forbidden" ? "нет прав" : d.error));
+      if (cb) cb(d);
+    });
+  } else if (cb) cb({ ok: true, admins: la });
+}
+function revokeAccess(target, cb) {
+  var tl = String(target).toLowerCase().replace(/^@/, "");
+  setLocalAdmins(localAdmins().filter(function (x) { return String(x).toLowerCase().replace(/^@/, "") !== tl; }));
+  if (CONFIG.statsEndpoint) {
+    var p = requesterParams(); p.action = "revoke"; p.target = target;
+    jsonp(p, function (d) {
+      if (d && d.admins) { RemoteAccess.admins = d.admins; RemoteAccess.loaded = true; }
+      if (cb) cb(d);
+    });
+  } else if (cb) cb({ ok: true });
+}
+
+/* ── Копирование в буфер + лёгкое уведомление поверх всего ───────────── */
+function flash(msg) {
+  var t = document.createElement("div");
+  t.className = "mono";
+  t.textContent = msg;
+  t.style.cssText = "position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99;max-width:90%;text-align:center;background:" + d.panelHi + ";border:1px solid " + d.gold + ";color:" + d.gold + ";padding:8px 14px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.5)";
+  document.body.appendChild(t);
+  setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 1300);
+}
+function copyText(v) {
+  v = String(v);
+  function ok() { flash("Скопировано: " + v); }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(v).then(ok, function () { fallbackCopy(v, ok); }); return; }
+  } catch (e) {}
+  fallbackCopy(v, ok);
+}
+function fallbackCopy(v, ok) {
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = v; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta); ok();
+  } catch (e) { flash("ID: " + v); }
 }
 
 // Порядок шагов воронки для дашборда
@@ -1029,7 +1117,7 @@ function AccountChip() {
       (Identity.user && Identity.user.photo_url)
         ? h("img", { src: Identity.user.photo_url, alt: "", style: { width: 26, height: 26, borderRadius: "50%", flexShrink: 0 } })
         : h("div", { style: { width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: d.panelHi, border: "1px solid " + d.border, textAlign: "center", lineHeight: "26px", fontSize: 13 } }, loggedIn ? "👤" : "🪪"),
-      h("span", { className: "mono", style: { fontSize: 12, color: loggedIn ? d.gold : d.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, loggedIn ? userLabel() : "Гость")
+      h("span", { onClick: loggedIn && Identity.user ? function () { copyText(String(Identity.user.id)); } : null, title: loggedIn ? "Нажмите, чтобы скопировать ваш ID" : null, className: "mono", style: { fontSize: 12, color: loggedIn ? d.gold : d.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: loggedIn ? "pointer" : "default" } }, loggedIn ? userLabel() : "Гость")
     ),
     isAdmin()
       ? h("button", { onClick: openDevPanel, className: "opt mono", style: { fontSize: 11, color: d.gold, background: d.panelHi, border: "1px solid " + d.gold, borderRadius: 9, padding: "5px 10px" } }, "🛠 Дашборд")
@@ -1073,9 +1161,10 @@ function openDevPanel() {
       h("h2", { className: "disp", style: { fontSize: 20, fontWeight: 700, color: d.gold } }, "🛠 Панель разработчика"),
       h("button", { onClick: closeDevPanel, className: "opt", style: { background: d.panel, border: "1px solid " + d.border, color: d.text, borderRadius: 10, padding: "6px 12px", fontSize: 13 } }, "Закрыть ✕")
     ),
-    h("div", { className: "mono", style: { fontSize: 11, color: d.muted, marginTop: 6 } },
-      "Вы: ", userLabel(), " · ваш Telegram ID: ",
-      h("span", { style: { color: d.gold } }, String(Identity.user ? Identity.user.id : "—"))),
+    h("div", { className: "flex items-center mono", style: { fontSize: 11, color: d.muted, marginTop: 6, gap: 8, flexWrap: "wrap" } },
+      h("span", null, "Вы: ", userLabel(), " · ID: ",
+        h("span", { style: { color: d.gold } }, String(Identity.user ? Identity.user.id : "—"))),
+      Identity.user ? h("button", { onClick: function () { copyText(String(Identity.user.id)); }, className: "opt mono", style: { fontSize: 10.5, color: d.muted, background: d.panel, border: "1px solid " + d.border, borderRadius: 7, padding: "3px 7px" } }, "⧉ скопировать") : null),
     h("div", { id: "dev-content", style: { marginTop: 16 } }, DashboardLoading())
   ));
   document.body.appendChild(overlay);
@@ -1092,26 +1181,71 @@ function loadDashboard() {
   var mount = document.getElementById("dev-content");
   if (!mount) return;
   if (CONFIG.statsEndpoint) {
-    fetchFunnelGlobal(function (data) {
-      var m = document.getElementById("dev-content");
-      if (!m) return;
-      m.innerHTML = "";
-      if (data) { data.scope = data.scope || "global"; m.appendChild(Dashboard(data)); }
-      else {
-        m.appendChild(h("div", { className: "mono", style: { color: d.red, fontSize: 12, marginBottom: 12 } }, "Глобальные данные недоступны — показываю локальные (это устройство)."));
-        m.appendChild(Dashboard(computeFunnelLocal()));
-      }
+    loadAccess(function () {
+      fetchFunnelGlobal(function (data) {
+        fetchUsersGlobal(function (users) {
+          var m = document.getElementById("dev-content");
+          if (!m) return;
+          m.innerHTML = "";
+          if (data) { data.scope = data.scope || "global"; m.appendChild(Dashboard(data, users || [])); }
+          else {
+            m.appendChild(h("div", { className: "mono", style: { color: d.red, fontSize: 12, marginBottom: 12 } }, "Глобальные данные недоступны — показываю локальные (это устройство)."));
+            m.appendChild(Dashboard(computeFunnelLocal(), computeUsersLocal()));
+          }
+        });
+      });
     });
   } else {
     mount.innerHTML = "";
-    mount.appendChild(h("div", { className: "mono", style: { color: d.muted, fontSize: 12, marginBottom: 12 } }, "statsEndpoint не задан — показываю локальные данные (это устройство). Подключите Apps Script для агрегации по всем."));
-    mount.appendChild(Dashboard(computeFunnelLocal()));
+    mount.appendChild(h("div", { className: "mono", style: { color: d.muted, fontSize: 12, marginBottom: 12 } }, "statsEndpoint не задан — локальные данные (это устройство). Подключите Apps Script для общих данных и выдачи доступа всем."));
+    mount.appendChild(Dashboard(computeFunnelLocal(), computeUsersLocal()));
   }
+}
+
+// Список пользователей по событиям этого устройства (фоллбэк без сервера)
+function computeUsersLocal() {
+  var evs = readLocalEvents(), map = {};
+  evs.forEach(function (e) {
+    var u = map[e.uid] = map[e.uid] || { uid: e.uid, uname: "", src: e.src, firstSeen: e.ts, lastSeen: e.ts, events: 0 };
+    if (e.uname) u.uname = e.uname;
+    u.events++;
+    if (e.ts < u.firstSeen) u.firstSeen = e.ts;
+    if (e.ts >= u.lastSeen) { u.lastSeen = e.ts; if (e.src) u.src = e.src; }
+  });
+  return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return b.lastSeen - a.lastSeen; });
+}
+
+function toggleAdmin(u) {
+  var target = u.uname ? "@" + u.uname : String(u.uid);
+  if (entryIsAdmin(u.uid, u.uname)) revokeAccess(target, function () { flash("Доступ убран: " + target); loadDashboard(); });
+  else grantAccess(target, function () { flash("Доступ выдан: " + target); loadDashboard(); });
+}
+
+// Секция «Пользователи» с копированием ID и переключателем доступа
+function UsersSection(users) {
+  var wrap = h("div", null);
+  wrap.appendChild(h("div", { className: "disp", style: { fontWeight: 700, fontSize: 15, margin: "18px 0 8px" } }, "Пользователи (" + (users ? users.length : 0) + ")"));
+  if (!users || !users.length) {
+    wrap.appendChild(h("div", { className: "mono", style: { color: d.muted, fontSize: 12 } }, "Пока никого. ID появятся здесь, как только люди начнут заходить."));
+    return wrap;
+  }
+  users.slice(0, 300).forEach(function (u) {
+    var isA = entryIsAdmin(u.uid, u.uname);
+    var label = u.uname ? "@" + u.uname : (u.src === "guest" ? "Гость" : "id " + u.uid);
+    wrap.appendChild(h("div", { className: "flex items-center", style: { gap: 8, fontSize: 12, padding: "7px 0", borderBottom: "1px solid " + d.border } },
+      h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden" } },
+        h("span", { style: { color: isA ? d.gold : d.text, fontWeight: isA ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" } }, label, isA ? " ⭐" : ""),
+        h("span", { className: "mono", style: { display: "block", color: d.muted, fontSize: 10.5 } }, "id " + u.uid + " · " + (u.events || 0) + " соб.")),
+      h("button", { onClick: function () { copyText(u.uid); }, className: "opt mono", style: { fontSize: 11, color: d.muted, background: d.panel, border: "1px solid " + d.border, borderRadius: 8, padding: "4px 8px", flexShrink: 0 } }, "⧉ ID"),
+      h("button", { onClick: function () { toggleAdmin(u); }, className: "opt mono", style: { fontSize: 11, color: isA ? d.red : d.gold, background: d.panel, border: "1px solid " + (isA ? d.red : d.gold), borderRadius: 8, padding: "4px 8px", flexShrink: 0 } }, isA ? "Убрать" : "Админ")
+    ));
+  });
+  return wrap;
 }
 
 function pct(a, b) { return b ? Math.round((a / b) * 100) : 0; }
 
-function Dashboard(data) {
+function Dashboard(data, users) {
   var ev = data.events || {};
   var firstUsers = (ev[FUNNEL_STEPS[0].key] && ev[FUNNEL_STEPS[0].key].users) || data.totalUsers || 0;
   var wrap = h("div", null);
@@ -1157,6 +1291,9 @@ function Dashboard(data) {
       ));
     });
   }
+
+  // Пользователи (сбор ID + выдача доступа)
+  wrap.appendChild(UsersSection(users));
 
   // Действия
   wrap.appendChild(h("div", { className: "flex", style: { gap: 10, marginTop: 20 } },
@@ -1228,6 +1365,8 @@ function init() {
     if ((location.hash || "").indexOf("dev") !== -1 && isAdmin()) openDevPanel();
   });
   render();
+  // Подтягиваем серверный whitelist: если текущему юзеру выдали доступ — покажем кнопку дашборда
+  if (CONFIG.statsEndpoint && isLoggedIn()) loadAccess(function () { render(); });
 }
 
 init();

@@ -11,6 +11,19 @@
  *  4. Вставьте этот URL в index.html → CONFIG.statsEndpoint.
  *
  * Лист "events" создаётся автоматически при первом событии.
+ *
+ * ДОСТУП К ДАШБОРДУ (whitelist хранится на сервере, общий для всех):
+ *  • Список админов лежит в Script Properties (ключ ADMINS, JSON-массив).
+ *  • Первичная выдача: Project Settings → Script Properties →
+ *    добавьте свойство SEED_ADMINS со значением вашего юзернейма или ID,
+ *    например «@Desanji» (можно несколько через запятую). При первом
+ *    обращении этот список станет начальным набором админов.
+ *  • Дальше админы выдают/забирают доступ кнопкой прямо в дашборде.
+ *
+ * Примечание о безопасности: личность запрашивающего (byId/byName)
+ * приходит с клиента и не верифицируется подписью Telegram — это тот же
+ * уровень доверия, что и во всём приложении. При необходимости строгой
+ * проверки можно валидировать подпись Telegram-логина по токену бота.
  */
 
 var SHEET_NAME = 'events';
@@ -52,11 +65,17 @@ function doPost(e) {
   return ContentService.createTextOutput('ok').setMimeType(ContentService.MimeType.TEXT);
 }
 
-// Агрегаты для дашборда (JSONP)
+// Агрегаты и управление доступом для дашборда (JSONP)
 function doGet(e) {
-  var action = (e && e.parameter && e.parameter.action) || 'funnel';
-  var callback = e && e.parameter && e.parameter.callback;
-  var payload = (action === 'funnel') ? buildFunnel_() : { error: 'unknown action' };
+  var p = (e && e.parameter) || {};
+  var action = p.action || 'funnel';
+  var callback = p.callback;
+  var payload;
+  if (action === 'funnel') payload = buildFunnel_();
+  else if (action === 'users') payload = buildUsers_();
+  else if (action === 'access') payload = { admins: getAdmins_() };
+  else if (action === 'grant' || action === 'revoke') payload = mutateAccess_(action, p);
+  else payload = { error: 'unknown action' };
   var json = JSON.stringify(payload);
   if (callback) {
     return ContentService
@@ -64,6 +83,71 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ── Управление доступом к дашборду ──────────────────────────────────── */
+var PROP_ = PropertiesService.getScriptProperties();
+
+function norm_(x) { return String(x == null ? '' : x).trim().toLowerCase(); }
+
+function getAdmins_() {
+  var list = [];
+  try { list = JSON.parse(PROP_.getProperty('ADMINS') || '[]') || []; } catch (e) {}
+  if (!list.length) { // первичный набор из SEED_ADMINS
+    var seed = PROP_.getProperty('SEED_ADMINS') || '';
+    seed.split(/[\s,]+/).forEach(function (x) { x = x.trim(); if (x) list.push(x); });
+    if (list.length) PROP_.setProperty('ADMINS', JSON.stringify(list));
+  }
+  return list;
+}
+
+function isAdminEntry_(list, id, uname) {
+  id = norm_(id);
+  var un = uname ? '@' + norm_(uname).replace(/^@/, '') : '';
+  for (var i = 0; i < list.length; i++) {
+    var t = norm_(list[i]);
+    if (!t) continue;
+    if (id && t === id) return true;
+    if (un && (t === un || t === un.slice(1))) return true;
+  }
+  return false;
+}
+
+function mutateAccess_(action, p) {
+  var admins = getAdmins_();
+  if (!isAdminEntry_(admins, p.byId, p.byName)) {
+    return { ok: false, error: 'forbidden', admins: admins };
+  }
+  var target = String(p.target || '').trim();
+  if (!target) return { ok: false, error: 'no target', admins: admins };
+  var tn = norm_(target).replace(/^@/, '');
+  admins = admins.filter(function (x) { return norm_(x).replace(/^@/, '') !== tn; });
+  if (action === 'grant') admins.push(target);
+  PROP_.setProperty('ADMINS', JSON.stringify(admins));
+  return { ok: true, admins: admins };
+}
+
+/* ── Список собранных пользователей ──────────────────────────────────── */
+function buildUsers_() {
+  var sh = getSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return { users: [], scope: 'global', updated: Date.now() };
+  var rows = sh.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  var map = {};
+  for (var i = 0; i < rows.length; i++) {
+    var ts = Number(rows[i][0]) || 0;
+    var uid = String(rows[i][3]);
+    var uname = String(rows[i][4]);
+    var src = String(rows[i][5]);
+    var u = map[uid] = map[uid] || { uid: uid, uname: '', src: src, firstSeen: ts, lastSeen: ts, events: 0 };
+    if (uname) u.uname = uname;
+    u.events++;
+    if (ts && ts < u.firstSeen) u.firstSeen = ts;
+    if (ts >= u.lastSeen) { u.lastSeen = ts; if (src) u.src = src; }
+  }
+  var users = Object.keys(map).map(function (k) { return map[k]; });
+  users.sort(function (a, b) { return b.lastSeen - a.lastSeen; });
+  return { users: users, scope: 'global', updated: Date.now() };
 }
 
 function buildFunnel_() {
