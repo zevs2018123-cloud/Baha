@@ -712,11 +712,19 @@ function ScreenAuth() {
     ),
     h("h1", { className: "disp", style: { fontSize: 28, lineHeight: 1.12, fontWeight: 700 } }, "Школа трейдинга ", h("span", { style: { color: d.gold } }, "Бахи")),
     h("p", { style: { color: d.muted, marginTop: 12, fontSize: 14, lineHeight: 1.5 } }, "Войдите через Telegram, чтобы начать обучение и сохранять прогресс. Это занимает пару секунд и нужно только один раз."),
-    h("div", { id: "tg-login-holder", className: "flex justify-center", style: { marginTop: 22, minHeight: 46 } }),
+    // Главный путь без веб-логина: открыть как Mini App внутри Telegram
     CONFIG.botUsername
-      ? h("a", { href: "https://t.me/" + CONFIG.botUsername, target: "_blank", rel: "noopener", className: "mono", style: { display: "inline-block", marginTop: 16, fontSize: 12, color: d.muted, textDecoration: "underline" } }, "Не открывается кнопка? Открыть в Telegram →")
+      ? h("a", { href: "https://t.me/" + CONFIG.botUsername, target: "_blank", rel: "noopener", className: "opt", style: { display: "block", marginTop: 22, background: "#2aabee", color: "#fff", fontWeight: 700, fontSize: 16, padding: "14px", borderRadius: 12, textDecoration: "none" } }, "✈ Открыть в Telegram")
       : h("div", { className: "mono", style: { marginTop: 16, fontSize: 12, color: d.red } }, "Бот ещё не настроен (CONFIG.botUsername пуст)."),
-    h("p", { style: { color: d.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5 } }, "Нажимая «Log in», вы подтверждаете вход через ваш Telegram-аккаунт. Мы получаем только имя и аватар — без доступа к переписке."),
+    h("p", { className: "mono", style: { color: d.muted, fontSize: 11, marginTop: 8 } }, "Внутри Telegram вход произойдёт сам — без ввода пароля."),
+    // Запасной путь для браузера: Login Widget
+    CONFIG.botUsername ? h("div", { className: "flex items-center", style: { gap: 10, margin: "20px 0 4px" } },
+      h("div", { style: { flex: 1, height: 1, background: d.border } }),
+      h("span", { className: "mono", style: { fontSize: 11, color: d.muted } }, "или в браузере"),
+      h("div", { style: { flex: 1, height: 1, background: d.border } })
+    ) : null,
+    h("div", { id: "tg-login-holder", className: "flex justify-center", style: { marginTop: 12, minHeight: 46 } }),
+    h("p", { style: { color: d.muted, fontSize: 11, marginTop: 18, lineHeight: 1.5 } }, "Мы получаем только публичные данные Telegram (имя, аватар, username) — без доступа к переписке."),
     Footer()
   );
   if (CONFIG.botUsername) {
