@@ -154,6 +154,84 @@ var App = {
   fx: null,          // класс анимации перехода для текущего рендера
 };
 
+/* ── 4 уровня обучения «от простого к сложному» + этапы воронки клуба ──
+   Привязка по индексу модуля (fa): 0 club · 1 trade · 2 risk · 3 mind.
+   Каждый уровень — отдельный этап воронки закрытого канала: от знакомства
+   и доверия до самостоятельной торговли. */
+var LV = [
+  { num: 1, tier: "Простой",     stage: "Этап 1 · Знакомство и доверие",   hint: "Как устроен клуб и почему это безопасно" },
+  { num: 2, tier: "Базовый",     stage: "Этап 2 · Первая практика",        hint: "Читаем сигнал: вход, тейки и лот" },
+  { num: 3, tier: "Средний",     stage: "Этап 3 · Дисциплина и управление",hint: "Риск 1–2%, RR 1:2 и перенос стопа" },
+  { num: 4, tier: "Продвинутый", stage: "Этап 4 · Путь к самостоятельности",hint: "Психология, ожидания и защита от развода" },
+];
+function lvOf(i) { return LV[i] || { num: i + 1, tier: "", stage: "", hint: "" }; }
+
+/* ── Память сессии: сохранение прогресса и продолжение с места остановки ── */
+var PROGRESS_KEY = "bahaSchool_progress_v1";
+// Поля состояния, которые имеет смысл хранить между сессиями.
+var SAVE_FIELDS = ["screen", "modIdx", "qIdx", "sel", "answered", "xp", "streak", "maxStreak", "moduleCorrect", "done", "badges", "quiz"];
+var Saved = null;
+
+// Есть ли реальный прогресс (а не пустой стартовый экран).
+function isMeaningful(s) {
+  return !!(s && ((s.done && s.done.length > 0) || s.xp > 0 || (s.badges && s.badges.length > 0) ||
+    ["lesson", "quiz", "moduleResult", "map", "final"].indexOf(s.screen) !== -1));
+}
+
+function saveProgress() {
+  if (!isMeaningful(App)) return; // не затираем сохранённое пустым стартом
+  try {
+    var data = { v: 1, ts: Date.now() };
+    SAVE_FIELDS.forEach(function (k) { data[k] = App[k]; });
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(data));
+  } catch (e) {}
+}
+
+function loadProgress() {
+  try {
+    var raw = localStorage.getItem(PROGRESS_KEY);
+    Saved = raw ? JSON.parse(raw) : null;
+  } catch (e) { Saved = null; }
+  return Saved;
+}
+
+function clearProgress() {
+  try { localStorage.removeItem(PROGRESS_KEY); } catch (e) {}
+  Saved = null;
+}
+
+function hasResume() { return isMeaningful(Saved); }
+
+// Текущий уровень обучения (1..4) по сохранённому прогрессу — для подписи на старте.
+function savedLevelNum() {
+  if (!Saved) return 1;
+  var doneN = Saved.done ? Saved.done.length : 0;
+  if (Saved.screen === "final") return 4;
+  return Math.min(doneN + 1, 4);
+}
+
+function resume() {
+  if (!Saved) return;
+  SAVE_FIELDS.forEach(function (k) { if (Saved[k] !== undefined) App[k] = Saved[k]; });
+  App.toast = null;
+  App.fx = null;
+  // Если урок/вопрос остался без восстановленного набора — пересобираем его.
+  if ((App.screen === "lesson" || App.screen === "quiz") && (!App.quiz || !App.quiz.length)) {
+    App.quiz = dT(fa[App.modIdx].id);
+    App.qIdx = 0; App.sel = null; App.answered = false;
+  }
+  go(App.screen);
+}
+
+// Начать заново: стираем память и идём в методичку.
+function freshStart() {
+  clearProgress();
+  App.modIdx = 0; App.qIdx = 0; App.sel = null; App.answered = false;
+  App.xp = 0; App.streak = 0; App.maxStreak = 0; App.moduleCorrect = 0;
+  App.done = []; App.badges = []; App.quiz = []; App.toast = null;
+  go("intro");
+}
+
 var toastTimer = null;
 function showToast(msg) {
   App.toast = msg;
@@ -252,6 +330,7 @@ function afterResult() {
 }
 
 function restart() {
+  clearProgress();
   App.screen = "start";
   App.modIdx = 0;
   App.qIdx = 0;
@@ -447,7 +526,16 @@ function ScreenStart() {
         return h("div", { className: "mono", style: { background: d.panel, border: "1px solid " + d.border, color: d.text, fontSize: 11, padding: "6px 10px", borderRadius: 8 } }, t);
       })),
     h("div", { className: "mono", style: { color: d.muted, fontSize: 11, marginTop: 8 } }, "будни · золото & форекс    выходные · крипта"),
-    h("button", { onClick: function () { go("intro"); }, className: "opt", style: { width: "100%", marginTop: 26, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, border: "none" } }, "Начать обучение"),
+    h("div", { className: "mono", style: { color: d.muted, fontSize: 11, marginTop: 14, letterSpacing: 1 } }, "4 уровня · от простого к сложному"),
+    hasResume()
+      ? [
+          h("div", { style: { marginTop: 14, background: d.panel, border: "1px solid " + d.gold, borderRadius: 12, padding: "11px 14px" } },
+            h("div", { className: "mono", style: { color: d.gold, fontSize: 12 } }, "↩︎ Есть сохранённый прогресс"),
+            h("div", { className: "mono", style: { color: d.muted, fontSize: 11, marginTop: 4 } }, "Уровень " + savedLevelNum() + "/4 · XP " + (Saved.xp || 0))),
+          h("button", { onClick: resume, className: "opt", style: { width: "100%", marginTop: 14, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, border: "none" } }, "Продолжить с места остановки"),
+          h("button", { onClick: freshStart, className: "opt", style: { width: "100%", marginTop: 10, background: "none", color: d.muted, fontWeight: 600, fontSize: 14, padding: "12px", borderRadius: 12, border: "1px solid " + d.border } }, "Начать заново"),
+        ]
+      : h("button", { onClick: function () { go("intro"); }, className: "opt", style: { width: "100%", marginTop: 18, background: d.gold, color: "#1a1407", fontWeight: 700, fontSize: 16, padding: "15px", borderRadius: 12, border: "none" } }, "Начать обучение"),
     Footer()
   );
 }
@@ -474,8 +562,9 @@ function ScreenMap() {
   return h("div", { className: "fade pt-6" },
     StatBar(lvl, App.xp, App.streak),
     h("div", { className: "flex items-baseline justify-between", style: { marginTop: 18 } },
-      h("h2", { className: "disp", style: { fontSize: 22, fontWeight: 700 } }, "Модули"),
+      h("h2", { className: "disp", style: { fontSize: 22, fontWeight: 700 } }, "Путь трейдера"),
       h("span", { className: "mono", style: { color: d.muted, fontSize: 12 } }, done.length, "/", mods.length, " · ", y, "%")),
+    h("p", { style: { color: d.muted, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 } }, "4 уровня от простого к сложному. Каждый уровень открывается после предыдущего — так выстроена воронка обучения клуба."),
     h("div", { style: { height: 4, background: d.panel, borderRadius: 4, marginTop: 10, overflow: "hidden" } },
       h("div", { style: { height: "100%", width: y + "%", background: d.gold, transition: "width .4s" } })),
     h("div", { className: "flex flex-col", style: { marginTop: 16, gap: 10 },
@@ -491,8 +580,10 @@ function ScreenMap() {
         },
           h("span", { style: { fontSize: 22 } }, hh ? q.icon : "🔒"),
           h("span", { style: { flex: 1 } },
+            h("span", { className: "mono", style: { display: "block", color: hh ? d.gold : d.muted, fontSize: 10.5, letterSpacing: 1, marginBottom: 3 } }, "УРОВЕНЬ " + lvOf(A).num + " · " + lvOf(A).tier),
             h("span", { style: { display: "block", fontWeight: 600, fontSize: 15, color: d.text } }, q.title),
-            h("span", { style: { display: "block", color: d.muted, fontSize: 12, marginTop: 2 } }, q.sub)),
+            h("span", { style: { display: "block", color: d.muted, fontSize: 12, marginTop: 2 } }, lvOf(A).stage),
+            h("span", { style: { display: "block", color: d.muted, fontSize: 11.5, marginTop: 1, opacity: 0.85 } }, q.sub)),
           M
             ? h("span", { className: "mono", style: { color: d.green, fontSize: 12 } }, g.correct, "/", g.total, " ✓")
             : hh
@@ -845,8 +936,10 @@ function render() {
   var outer = h("div", { className: "w-full flex justify-center", style: { background: d.bg, color: d.text, minHeight: "100vh", fontFamily: "Inter, system-ui, sans-serif" } }, inner);
   root.appendChild(outer);
   startCandleTickers(); // оживляем последнюю свечу на всех видимых графиках
+  saveProgress();       // память сессии: фиксируем прогресс после каждого экрана
 }
 
+loadProgress(); // подхватываем сохранённый прогресс до первого рендера
 render();
 
 </script>
